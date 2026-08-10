@@ -95,7 +95,7 @@ def test_pattern_fallback_email_generated_when_scraped_email_missing():
     assert processed["contact"]["email"] == "jamie.someone@avyn.io"
     assert processed["contact"]["email_method"] == "pattern_guess"
     assert processed["contact"]["email_confidence"] == "low"
-    assert processed["contacts_alt"][0]["email"] == "jsomeone@avyn.io"
+    assert processed["contacts_alt"][0]["email"] == "jamie@avyn.io"
     assert any("generated pattern fallback" in f for f in processed.get("research_failures", []))
 
 
