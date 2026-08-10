@@ -57,8 +57,8 @@ def _extract_domain(url_or_domain: str) -> str:
 # result.
 EMAIL_PATTERNS = [
     "{first}.{last}",
-    "{f}{last}",
     "{first}",
+    "{f}{last}",
     "{first}{last}",
     "{f}.{last}",
     "{last}",
@@ -703,7 +703,8 @@ def salvage_partial_cache(name, website, source_urls, raw_text, reason) -> dict:
 
 
 def _post_process(cache: dict, name: str, website: str | None, source_urls: list[str],
-                  resolved_domain: str = "", provider: Provider | None = None) -> dict:
+                  resolved_domain: str = "", provider: Provider | None = None,
+                  voice: Any = None) -> dict:
     cache = _sanitize_cache(cache)
     from .ingest import _display_name          # local import: avoids a top-level ingest<->research cycle
     cache.setdefault("company", {})
@@ -840,6 +841,12 @@ def _post_process(cache: dict, name: str, website: str | None, source_urls: list
     pts = cache.get("proof_points")
     if isinstance(pts, list) and pts:
         cache["proof_points"] = sorted(pts, key=_rank)
+
+    try:
+        from .observation import resolve_observation
+        cache["observation"] = resolve_observation(cache, provider=provider, voice=voice)
+    except Exception:
+        pass
 
     return _prune_nulls(cache)
 

@@ -81,6 +81,7 @@ def derive_tokens(spec: dict, variables: dict | None = None) -> dict:
         "role_or_company": role or company,
         "what_they_do": spec.get("what_they_do", "") or "",
         "situation_read": spec.get("situation_read", "") or "",
+        "observation": spec.get("observation", "") or "",
         "recent": recent.get("detail", "") if recent.get("present") else "",
         "recent_short": (recent.get("detail", "").split(",")[0] if recent.get("present") else ""),
         # Which kind of recent point research found (raise | funding | launch | hire |
@@ -221,6 +222,8 @@ def _scoped_facts(scope, spec: dict, shortlist: list) -> list[str]:
         facts += [p for p in (spec.get("proof_points") or []) if p]
     if "situation_read" in scope and spec.get("situation_read"):
         facts.append(spec["situation_read"])
+    if ("situation_read" in scope or "target_proofs" in scope) and spec.get("observation"):
+        facts.append(f"Observation: {spec['observation']}")
     if "profile_evidence" in scope or "candidate_evidence" in scope:
         facts += [e["anchor"] for e in (spec.get("evidence") or [])]
     if ("profile_spine" in scope or "candidate_spine" in scope) and spec.get("spine"):
@@ -440,5 +443,30 @@ def produce_email(provider: Provider, voice, spec: dict, tokens: dict, shortlist
                         if parts.get(b.id, "").strip())
     body_block = next((b for b in voice.blocks if b.length == "body"), None)
     body_text = parts.get(body_block.id, "") if body_block else ""
+    if body_block and body_text and provider and not getattr(provider, "is_stub", False):
+        from . import draft_feedback, revise, body_sampler
+        ctx = {
+            "style_examples": spec.get("style_examples") or list(getattr(voice.style, "examples", []) or []),
+            "observation": spec.get("observation", "") or "",
+            "proof_points": spec.get("proof_points", []) or [],
+            "situation_read": spec.get("situation_read", "") or "",
+            "feedback_checks": (getattr(voice, "variables", {}) or {}).get("feedback_checks", ""),
+        }
+        if (getattr(voice, "variables", {}) or {}).get("use_verbalized_sampling") == "true":
+            st = S.load_settings()
+            system = compile_system_prompt(voice, ai_blocks, spec, tokens, shortlist, followup=followup)
+            user = json.dumps({"task": "Generate candidate bodies"}, ensure_ascii=False)
+            cands = body_sampler.sample_bodies(system, user, provider=provider)
+            if cands:
+                best_cand = max(cands, key=lambda c: (draft_feedback.score(c["body"], ctx), c.get("p", 0.0)))
+                body_text = best_cand["body"]
+                parts[body_block.id] = body_text
+
+        revised = revise.revise_if_needed(body_text, ctx, provider=provider)
+        if revised and revised != body_text:
+            body_text = revised
+            parts[body_block.id] = body_text
+            email = "\n\n".join(parts[b.id].strip() for b in voice.blocks
+                                if parts.get(b.id, "").strip())
     return email, parts, body_text
 
